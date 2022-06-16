@@ -9,7 +9,8 @@ class ServerWorker:
 	PLAY = 'PLAY'
 	PAUSE = 'PAUSE'
 	TEARDOWN = 'TEARDOWN'
-	
+	DESCRIBE = 'DESCRIBE'
+	requestType = ''
 	INIT = 0
 	READY = 1
 	PLAYING = 2
@@ -41,7 +42,7 @@ class ServerWorker:
 		# Get the request type
 		request = data.split('\n')
 		line1 = request[0].split(' ')
-		requestType = line1[0]
+		self.requestType = line1[0]
 		
 		# Get the media file name
 		filename = line1[1]
@@ -50,7 +51,7 @@ class ServerWorker:
 		seq = request[1].split(' ')
 		
 		# Process SETUP request
-		if requestType == self.SETUP:
+		if self.requestType == self.SETUP:
 			if self.state == self.INIT:
 				# Update state
 				print("processing SETUP\n")
@@ -69,9 +70,15 @@ class ServerWorker:
 				
 				# Get the RTP/UDP port from the last line
 				self.clientInfo['rtpPort'] = request[2].split(' ')[3]
-		
+
+		# Process DESCRIBE request
+		elif self.requestType == self.DESCRIBE:
+			if self.state == self.READY:
+				print("processing  DESCRIBE\n")
+				self.replyRtsp(self.OK_200, seq[1])
+
 		# Process PLAY request 		
-		elif requestType == self.PLAY:
+		elif self.requestType == self.PLAY:
 			if self.state == self.READY:
 				print("processing PLAY\n")
 				self.state = self.PLAYING
@@ -87,7 +94,7 @@ class ServerWorker:
 				self.clientInfo['worker'].start()
 		
 		# Process PAUSE request
-		elif requestType == self.PAUSE:
+		elif self.requestType == self.PAUSE:
 			if self.state == self.PLAYING:
 				print("processing PAUSE\n")
 				self.state = self.READY
@@ -97,7 +104,7 @@ class ServerWorker:
 				self.replyRtsp(self.OK_200, seq[1])
 		
 		# Process TEARDOWN request
-		elif requestType == self.TEARDOWN:
+		elif self.requestType == self.TEARDOWN:
 			print("processing TEARDOWN\n")
 
 			self.clientInfo['event'].set()
@@ -128,7 +135,7 @@ class ServerWorker:
 					#print('-'*60)
 					#traceback.print_exc(file=sys.stdout)
 					#print('-'*60)
-
+			else: break
 	def makeRtp(self, payload, frameNbr):
 		"""RTP-packetize the video data."""
 		version = 2
@@ -151,9 +158,11 @@ class ServerWorker:
 		if code == self.OK_200:
 			#print("200 OK")
 			reply = 'RTSP/1.0 200 OK\nCSeq: ' + seq + '\nSession: ' + str(self.clientInfo['session'])
+			if self.requestType == self.DESCRIBE:
+				reply += '\nRTSP UTF-8'
 			connSocket = self.clientInfo['rtspSocket'][0]
 			connSocket.send(reply.encode())
-		
+
 		# Error messages
 		elif code == self.FILE_NOT_FOUND_404:
 			print("404 NOT FOUND")
